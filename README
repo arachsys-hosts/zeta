@@ -1,0 +1,37 @@
+System info
+===========
+
+zeta is an Intel NUC6i3SYB, with a dual-core Core i3-6100U, integrated i915
+GPU, 16GB RAM, Intel e1000e NIC, Intel AC8260 wifi and a 932GB NVMe SSD.
+
+The SSD is GPT partitioned:
+
+  Device              Start        End    Sectors  Size Type
+  /dev/nvme0n1p1       2048    1050623    1048576  512M EFI System
+  /dev/nvme0n1p2    1050624 1953525134 1952474511  931G Linux filesystem
+
+with /dev/nvme0n1p1 as /boot (vfat) and /dev/nvme0n1p2 as / (ext4).
+
+The kernel is booted directly by the UEFI BIOS with command line
+
+  loglevel=2 root=/dev/nvme0n1p2 i915.enable_guc=2
+
+We use a 1G zram device as swap to limit SSD wear.
+
+
+Upstream firmware binaries
+--------------------------
+
+The CPU microcode firmware/intel-ucode/* is obtained from
+
+  https://github.com/intel/Intel-Linux-Processor-Microcode-Data-Files
+
+The i915 GPU blobs firmware/i915/skl_*.bin and Intel AC8260 wifi firmware
+firmware/iwlwifi-8000C-*.ucode are obtained from
+
+  https://git.kernel.org/pub/scm/linux/kernel/git/firmware/linux-firmware.git
+
+The firmware/regulatory.db database is obtained from
+
+  https://git.kernel.org/pub/scm/linux/kernel/git/sforshee/wireless-regdb.git
+
