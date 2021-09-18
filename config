@@ -1,4 +1,4 @@
-# Linux/x86 5.14.1 Kernel Configuration
+# Linux/x86 5.14.6 Kernel Configuration
 #
 # CONFIG_LOCALVERSION_AUTO is not set
 CONFIG_KERNEL_ZSTD=y
