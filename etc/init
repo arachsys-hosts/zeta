@@ -1,0 +1,60 @@
+#!/bin/bash
+
+set -o pipefail
+shopt -s dotglob extglob nullglob
+export PATH=/bin
+
+hostname zeta
+
+mount -a -n -t proc
+mount -a -n -t cgroup2,devtmpfs,sysfs,tmpfs
+mkdir -p /dev/pts && mount -a -n -t devpts
+mkdir -m 0755 -p /run/empty && mount -r -B /run/empty /run/empty
+mkdir -m 1777 -p /run/lock /run/shm
+
+ln -f -n -s /proc/self/fd /dev/fd
+ln -f -n -s fd/0 /dev/stdin
+ln -f -n -s fd/1 /dev/stdout
+ln -f -n -s fd/2 /dev/stderr
+
+if ZRAM=$(zramctl -f -s 1G); then
+  mkswap $ZRAM >/dev/null
+  swapon -d $ZRAM
+fi
+
+mount -n -o remount,ro /
+fsck -a -A -P -T >/dev/null
+if [[ $? -gt 1 ]]; then
+  sulogin -p /dev/console
+  sync && exec stop reboot
+fi
+mount -o remount,rw /
+mount -a -t nonfs
+
+if [[ -c /dev/watchdog ]] && exec >/dev/watchdog; then
+  enable -f /lib/bash/sleep sleep
+  trap 'printf V && exit' TERM
+  while printf '\0'; do sleep 15; done
+fi & disown
+
+for TTY in /dev/tty[1-6]; do
+  daemon -c -r agetty ${TTY#/dev/}
+done
+
+ip link set lo up
+
+syslogd -s
+iw reg set US && daemon -p /run/iwd.pid -r iwd
+ssh-keygen -A && $(type -P sshd)
+daemon -w /run/resolv.dir/wlan0.dns ntpd -p /run/ntpd.pid
+
+[[ -r /dev/initctl ]] || mkfifo -m 0600 /dev/initctl
+ctrlaltdel soft && trap reboot INT
+while read -d '' -r MESSAGE; do
+  [[ $MESSAGE == @(halt|poweroff|reboot) ]] && break
+  [[ ${MESSAGE%% *} == run ]] && eval "${MESSAGE#run }"
+done <>/dev/initctl
+
+kill -TERM -1 && sleep 2 && kill -KILL -1
+swapoff -a && umount -a -r
+sync && exec stop "$MESSAGE"
