@@ -2,6 +2,7 @@ bc
 bison
 build
 dosfstools
+dtc
 e2fsprogs
 file
 flex

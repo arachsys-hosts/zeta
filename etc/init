@@ -32,7 +32,8 @@ start() {
   if [[ -c /dev/watchdog ]] && exec >/dev/watchdog && wait; then
     trap 'printf V && exit' TERM
     while printf '\0'; do read -t 15; done
-  fi <><(:) & disown
+  fi <><(:) &
+  disown $!
 
   dmesg --console-off
   while read TTY _; do
@@ -43,9 +44,9 @@ start() {
   iw reg set US
 
   syslogd -k
-  daemon -p /run/iwd.pid -r iwd
+  daemon -p /run/iwd.pid -r -w /dev/log iwd
   ssh-keygen -A && $(type -P sshd)
-  daemon -w /run/resolv.conf ntpd -p /run/ntpd.pid
+  ntpd -p /run/ntpd.pid
   test -w / && users start
 
   trap 'exec "$0" stop reboot' INT
