@@ -44,7 +44,7 @@ start() {
   iw reg set US
 
   syslogd -k
-  daemon -p /run/iwd.pid -r -w /dev/log iwd
+  daemon -p /run/iwd.pid -r iwd
   ssh-keygen -A && $(type -P sshd)
   ntpd -p /run/ntpd.pid
   test -w / && users start
