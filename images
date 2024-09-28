@@ -6,13 +6,13 @@ dtc
 e2fsprogs
 file
 flex
+fping
 fzf
 git
 go
 hypervisor
 ipmitool
 iproute2
-iputils-ping
 iw
 iwd
 kakoune
