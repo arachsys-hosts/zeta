@@ -3,79 +3,89 @@
 set -o pipefail
 export PATH=/bin
 
-start() {
-  hostname zeta
+case "$1" in
+  start | "")
+    hostname zeta
+    ctrlaltdel soft
 
-  mount -a -t proc
-  mount -a -m -t cgroup2,devpts,devtmpfs,sysfs,tmpfs
-  mount -m -r -B /run/empty /run/empty
-  mkdir -m 1777 -p /run/lock /run/shm
+    mount -a -t proc
+    mount -a -m -t cgroup2,devpts,devtmpfs,sysfs,tmpfs
+    mount -m -r -B /run/empty /run/empty
+    mkdir -m 1777 -p /run/lock /run/shm
 
-  ln -f -n -s pts/ptmx /dev/ptmx
-  ln -f -n -s /proc/self/fd /dev/fd
-  ln -f -n -s fd/0 /dev/stdin
-  ln -f -n -s fd/1 /dev/stdout
-  ln -f -n -s fd/2 /dev/stderr
+    ln -f -n -s pts/ptmx /dev/ptmx
+    ln -f -n -s /proc/self/fd /dev/fd
+    ln -f -n -s fd/0 /dev/stdin
+    ln -f -n -s fd/1 /dev/stdout
+    ln -f -n -s fd/2 /dev/stderr
 
-  if ZRAM=$(zramctl -f -s 1G); then
-    mkswap $ZRAM >/dev/null
-    swapon -d $ZRAM
-  fi
-
-  mount -o remount,ro /
-  fsck -a -A -P -T >/dev/null
-  if [[ $? -le 1 ]]; then
-    mount -o remount,rw /
-    mount -a -t nonfs
-  fi
-
-  if [[ -c /dev/watchdog ]] && exec >/dev/watchdog && wait; then
-    trap 'printf V && exit' TERM
-    while printf '\0'; do read -t 15; done
-  fi <><(:) &
-  disown $!
-
-  dmesg --console-off
-  while read TTY _; do
-    daemon -c -r agetty $TTY
-  done < /proc/consoles
-
-  ip link set lo up
-  iw reg set US
-
-  syslogd -k
-  daemon -p /run/iwd.pid -r iwd
-  ssh-keygen -A && $(type -P sshd)
-  ntpd -p /run/ntpd.pid -s
-  test -w / && users start
-
-  trap 'exec "$0" stop reboot' INT
-  trap 'exec "$0" stop poweroff' TERM
-
-  ctrlaltdel soft
-  while true; do read; done <><(:)
-}
-
-stop() {
-  test -w / && users stop && sleep 3
-  kill -TERM -1 && sleep 2 && kill -KILL -1
-  if swapoff -a && umount -a -r; then
-    echo "Remounted filesystems read-only"
-  else
-    sync && echo "Flushed filesystem writes"
-  fi
-  exec stop "$@"
-}
-
-users() {
-  getent passwd | while IFS=: read -r USER _ _ _ _ HOME SHELL; do
-    if [[ -x $HOME/.config/init/$1 ]]; then
-      daemon -d "$HOME" -u "$USER" \
-        env -i HOME="$HOME" LOGNAME="$USER" PATH="$PATH" SHELL="$SHELL" \
-          USER="$USER" "$HOME/.config/init/$1" "${@:2}"
-      logger -p user.info -t init "Spawned $HOME/.config/init/$1"
+    if ZRAM=$(zramctl -f -s 1G); then
+      mkswap $ZRAM >/dev/null
+      swapon -d $ZRAM
     fi
-  done
-}
 
-"${@:-start}"
+    mount -o remount,ro /
+    fsck -a -A -P -T >/dev/null
+    if [[ $? -le 1 ]]; then
+      mount -o remount,rw /
+      mount -a -t nonfs
+    fi
+
+    dmesg --console-off
+    while read TTY _; do
+      daemon -c -r agetty $TTY
+    done < /proc/consoles
+
+    ip link set lo up
+    iw reg set US
+
+    syslogd -k
+    daemon -p /run/iwd.pid -r iwd
+    ssh-keygen -A && $(type -P sshd)
+    ntpd -p /run/ntpd.pid -s
+
+    daemon "$0" watchdog
+    test -w / && daemon "$0" users start
+    exec "$0" reap
+    ;;
+
+  stop)
+    test -w / && "$0" users stop && sleep 3
+    kill -TERM -1 && sleep 2 && kill -KILL -1
+    echo && dmesg --console-on
+
+    if swapoff -a && umount -a -r; then
+      echo "Remounted filesystems read-only"
+    elif sync; then
+      echo "Flushed filesystem writes"
+    fi
+
+    exec stop "${@:2}"
+    ;;
+
+  users)
+    getent passwd | while IFS=: read -r USER _ _ _ _ HOME SHELL; do
+      if [[ -x $HOME/.config/init/${2:-start} ]]; then
+        daemon -d "$HOME" -u "$USER" \
+          env -i HOME="$HOME" LOGNAME="$USER" PATH="$PATH" SHELL="$SHELL" \
+            USER="$USER" "$HOME/.config/init/${2:-start}" "${@:3}"
+        logger -p user.info -t init "Spawned $HOME/.config/init/${2:-start}"
+      fi
+    done
+    ;;
+
+  watchdog)
+    if [[ -c /dev/watchdog ]]; then
+      exec <><(:) >/dev/watchdog && wait
+      trap 'printf V && exit' TERM
+      while printf '\0'; do read -t 15; done
+    fi
+    ;;
+
+  *)
+    trap 'exec "$0" reap 3>&-' HUP
+    trap 'exec "$0" stop reboot 3>&-' INT
+    trap 'exec "$0" stop poweroff 3>&-' TERM
+    exec 3<><(:) && while true; do read -u 3; done
+    ;;
+esac
