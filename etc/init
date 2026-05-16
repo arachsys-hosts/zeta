@@ -54,13 +54,13 @@ case "$1" in
     kill -TERM -1 && sleep 2 && kill -KILL -1
     echo && dmesg --console-on
 
-    if swapoff -a && umount -a -r; then
+    if swapoff -a && umount -a -r -t nodevtmpfs; then
       echo "Remounted filesystems read-only"
     elif sync; then
       echo "Flushed filesystem writes"
     fi
 
-    exec stop "${@:2}"
+    exec xargs -n 1 stop <<< "${*:2} reboot"
     ;;
 
   users)
@@ -84,7 +84,7 @@ case "$1" in
 
   *)
     trap 'exec "$0" reap 3>&-' HUP
-    trap 'exec "$0" stop reboot 3>&-' INT
+    trap 'exec "$0" stop kexec reboot 3>&-' INT
     trap 'exec "$0" stop poweroff 3>&-' TERM
     exec 3<><(:) && while true; do read -u 3; done
     ;;
